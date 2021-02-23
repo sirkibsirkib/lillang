@@ -1,4 +1,7 @@
-use crate::{vm::Vm, ByteCodeBuf, ByteCodeBufBuilder, OpCode as Oc};
+use crate::{
+    bytecode::{ByteCodeBuf, ByteCodeBufBuilder, OpCode as Oc},
+    vm::Vm,
+};
 
 fn build_with(mut f: impl FnMut(&mut ByteCodeBufBuilder)) -> ByteCodeBuf {
     let mut bcbb = ByteCodeBufBuilder::default();

@@ -1,4 +1,7 @@
-use super::*;
+use crate::{
+    bytecode::{ByteCode, OpCode},
+    {OpArgBuf, WORD_SIZE},
+};
 
 #[derive(Debug)]
 pub struct Vm<'a> {
@@ -16,7 +19,7 @@ struct VmParser<'a> {
 #[derive(Debug, Default)]
 struct VmParserResult {
     code: Option<OpCode>,
-    args: OpArgs,
+    args: OpArgBuf,
 }
 
 ///////////////////////////////////////////
