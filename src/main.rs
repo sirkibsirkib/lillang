@@ -9,10 +9,7 @@ impl OpInfo {
         (self.args << 4) | self.suffix
     }
     const fn unpack(data: u8) -> Self {
-        Self {
-            args: data >> 4,
-            suffix: data & 0b1111,
-        }
+        Self { args: data >> 4, suffix: data & 0b1111 }
     }
 }
 // TODO
@@ -142,11 +139,7 @@ impl ByteCodeBuilder {
 }
 impl<'a> VmParser<'a> {
     pub fn new(bytecode: ByteCode<'a>) -> Self {
-        Self {
-            res_buf: Default::default(),
-            bytecode,
-            next_code_offset: 0,
-        }
+        Self { res_buf: Default::default(), bytecode, next_code_offset: 0 }
     }
     pub fn parse_next(&mut self) {
         if let Some(op_code) = self.bytecode.read_op_code_at(self.next_code_offset) {
@@ -174,11 +167,7 @@ impl<'a> VmParser<'a> {
 }
 impl<'a> Vm<'a> {
     pub fn new_run(bytecode: ByteCode<'a>) {
-        let mut vm = Self {
-            stack: Default::default(),
-            bp: 0,
-            parser: VmParser::new(bytecode),
-        };
+        let mut vm = Self { stack: Default::default(), bp: 0, parser: VmParser::new(bytecode) };
         loop {
             vm.parser.parse_next();
             if !vm.take_do_parsed() {
@@ -189,10 +178,7 @@ impl<'a> Vm<'a> {
     pub fn take_do_parsed(&mut self) -> bool {
         if let Some(op_code) = self.parser.res_buf.code.take() {
             use OpCode as Oc;
-            println!(
-                "VM handling {:?} with args {:?}",
-                op_code, &self.parser.res_buf.args
-            );
+            println!("VM handling {:?} with args {:?}", op_code, &self.parser.res_buf.args);
             let args = &self.parser.res_buf.args;
             match op_code {
                 Oc::PushConst => self.stack.push(args[0]),
