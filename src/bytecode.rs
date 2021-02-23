@@ -26,12 +26,15 @@ pub struct ByteCodeBufBuilder {
     bcb: ByteCodeBuf, // being constructed
 }
 
-// effectively a bump allocator for (OpCode [usize]) structures
+// effectively a bump allocator for opcodes and their arguments
 #[derive(Default)]
 pub struct ByteCodeBuf {
-    bytes: Vec<u8>, // packed data
+    // invariant: sequence of packed (OpCode [usize]) bytes
+    bytes: Vec<u8>,
 }
+
 pub struct ByteCode<'a> {
+    // invariant: contents are entire slice of ByteCodeBuf. We inherit its invariants
     bytes: &'a [u8],
 }
 
@@ -60,7 +63,11 @@ impl std::fmt::Debug for ByteCode<'_> {
         let mut offset = 0;
         write!(f, "ByteCode [")?;
         while offset < self.bytes.len() {
-            let op = self.read_op_code_at(offset).unwrap();
+            let op = unsafe {
+                // safe! rely on ByteCode's invariant
+                self.read_op_code_at(offset)
+            }
+            .unwrap();
             offset += 1;
             write!(f, "{:?}=0b{:X} [", op, op as u8)?;
             for _ in 0..op.word_args() {
@@ -79,16 +86,18 @@ impl OpCode {
     }
 }
 impl ByteCode<'_> {
-    pub fn read_op_code_at(&self, offset: usize) -> Option<OpCode> {
+    // safe IFF caller provides offset to valid opcode
+    pub(crate) unsafe fn read_op_code_at(&self, offset: usize) -> Option<OpCode> {
         if let Some(&byte) = self.bytes.get(offset) {
-            Some(unsafe { std::mem::transmute(byte) })
+            Some(std::mem::transmute(byte))
         } else {
             None
         }
     }
-    pub fn read_word_at(&self, offset: usize) -> Option<usize> {
+    pub(crate) fn read_word_at(&self, offset: usize) -> Option<usize> {
         if offset < self.bytes.len() + WORD_SIZE {
             Some(unsafe {
+                // safe! (1) we do bounds checking above, and (2) all mem contents are valid usize values
                 (self.bytes.get_unchecked(offset) as *const u8 as *const usize).read_unaligned()
             })
         } else {
@@ -103,18 +112,21 @@ impl ByteCodeBufBuilder {
         bytes.extend(dummy_iter);
         // 2. overview nonsense bytes with `word` bytes
         unsafe {
+            // safe! (1) we write within the bounds of the vector,
+            // and (2) the transmutation [usize] -> [u8; WORD_SIZE] is always valid
             let len = bytes.len() - WORD_SIZE;
             let ptr = bytes.get_unchecked_mut(len) as *mut u8 as *mut usize;
             ptr.write_unaligned(word);
         }
     }
     pub fn push_with_args(&mut self, op_code: OpCode) {
-        self.bcb.bytes.push(unsafe { std::mem::transmute(op_code) });
+        self.bcb.bytes.push(op_code as u8);
         for &word in self.args[0..op_code.word_args()].iter() {
             Self::push_word_bytes(&mut self.bcb.bytes, word)
         }
     }
     pub fn finish(self) -> ByteCodeBuf {
+        // TODO check that arg ptrs fall within bounds & land on an op code
         self.bcb
     }
 }
