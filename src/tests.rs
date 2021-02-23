@@ -1,12 +1,27 @@
-use crate::{vm::Vm, ByteCodeBuilder, OpCode as Oc};
+use crate::{vm::Vm, ByteCodeBuf, ByteCodeBufBuilder, OpCode as Oc};
+
+fn build_with(mut f: impl FnMut(&mut ByteCodeBufBuilder)) -> ByteCodeBuf {
+    let mut bcbb = ByteCodeBufBuilder::default();
+    f(&mut bcbb);
+    bcbb.finish()
+}
 
 #[test]
-fn just_push() {
-    let mut bcb = ByteCodeBuilder::default();
-    bcb.args[0] = 0;
-    bcb.push_with_args(Oc::PushConst);
-    let bc = bcb.finish();
-    println!("{:?}", &bc);
+fn build_just_push() {
+    let bcb = build_with(|bcbb| {
+        // push(0)
+        bcbb.args[0] = 0;
+        bcbb.push_with_args(Oc::PushConst);
+    });
+    println!("{:?}", &bcb);
+}
 
-    Vm::new_run(bc.as_bytecode());
+#[test]
+fn run_just_push() {
+    let bcb = build_with(|bcbb| {
+        // push(0)
+        bcbb.args[0] = 0;
+        bcbb.push_with_args(Oc::PushConst);
+    });
+    Vm::new_run(bcb.as_bytecode());
 }

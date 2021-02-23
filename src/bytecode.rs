@@ -59,7 +59,7 @@ impl ByteCode<'_> {
         }
     }
 }
-impl ByteCodeBuilder {
+impl ByteCodeBufBuilder {
     fn push_word_bytes(bytes: &mut Vec<u8>, word: usize) {
         // 1. write WORD_SIZE bytes of nonsense into the vec (making space)
         let dummy_iter = std::iter::repeat(0u8).take(WORD_SIZE);
@@ -72,13 +72,12 @@ impl ByteCodeBuilder {
         }
     }
     pub fn push_with_args(&mut self, op_code: OpCode) {
-        self.bytes.push(unsafe { std::mem::transmute(op_code) });
+        self.bcb.bytes.push(unsafe { std::mem::transmute(op_code) });
         for &word in self.args[0..op_code.word_args()].iter() {
-            Self::push_word_bytes(&mut self.bytes, word)
+            Self::push_word_bytes(&mut self.bcb.bytes, word)
         }
     }
     pub fn finish(self) -> ByteCodeBuf {
-        let Self { bytes, .. } = self;
-        ByteCodeBuf { bytes }
+        self.bcb
     }
 }

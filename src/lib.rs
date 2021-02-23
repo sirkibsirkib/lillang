@@ -1,6 +1,8 @@
 pub mod bytecode;
-mod tests;
 pub mod vm;
+
+#[cfg(test)]
+mod tests;
 
 const WORD_SIZE: usize = std::mem::size_of::<usize>();
 type OpArgs = [usize; 1];
@@ -25,18 +27,17 @@ pub enum OpCode {
     IfNzJmp = OpInfo { args: 1, suffix: 4 }.pack(),   // [new offset] stack
 }
 
+#[derive(Debug, Default)]
+pub struct ByteCodeBufBuilder {
+    pub args: OpArgs,
+    bcb: ByteCodeBuf, // being constructed
+}
+
 // effectively a bump allocator for (OpCode [usize]) structures
 #[derive(Default)]
 pub struct ByteCodeBuf {
     bytes: Vec<u8>, // packed data
 }
-#[derive(Debug, Default)]
-pub struct ByteCodeBuilder {
-    pub args: OpArgs,
-    bytes: Vec<u8>,
-}
 pub struct ByteCode<'a> {
     bytes: &'a [u8],
 }
-
-////////////////////////////
