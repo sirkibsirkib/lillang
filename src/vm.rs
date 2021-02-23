@@ -41,8 +41,13 @@ impl<'a> VmParser<'a> {
         if let Some(op_code) = maybe_op_code {
             let mut next_code_offset = self.next_code_offset + 1;
             for arg in self.res_buf.args.iter_mut().take(op_code.word_args()) {
-                *arg = self.bytecode.read_word_at(next_code_offset).unwrap(); // ERR if malformed bytecode!
-                next_code_offset += WORD_SIZE;
+                if let Some(word) = self.bytecode.read_word_at(next_code_offset) {
+                    *arg = word;
+                    next_code_offset += WORD_SIZE;
+                } else {
+                    self.res_buf.code = None;
+                    return; // malformed bytecode!
+                }
             }
             // We preserve the invariant: next_code_offset points to valid opcode
             self.next_code_offset = next_code_offset;
