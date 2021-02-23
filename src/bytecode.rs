@@ -10,8 +10,9 @@ struct OpInfo {
 pub enum OpCode {
     // 0 arg ops
     TosDown = OpInfo { args: 0, suffix: 0 }.pack(), // stack-
-    WrapAddStack = OpInfo { args: 0, suffix: 1 }.pack(), // stack--
-    DecStack = OpInfo { args: 0, suffix: 2 }.pack(), // stack
+    WrapAddStack = OpInfo { args: 0, suffix: 1 }.pack(), // stack--+
+    DecStack = OpInfo { args: 0, suffix: 2 }.pack(), // stack-+
+    SysOut = OpInfo { args: 0, suffix: 3 }.pack(),  // stack-
     // 1 arg ops
     PushConst = OpInfo { args: 1, suffix: 0 }.pack(), // [value] stack+
     Load = OpInfo { args: 1, suffix: 1 }.pack(),      // [data at] stack+
@@ -35,6 +36,7 @@ pub struct ByteCodeBuf {
 
 pub struct ByteCode<'a> {
     // invariant: contents are entire slice of ByteCodeBuf. We inherit its invariants
+    // invariant: adjacent to each
     bytes: &'a [u8],
 }
 
@@ -62,18 +64,23 @@ impl std::fmt::Debug for ByteCode<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut offset = 0;
         write!(f, "ByteCode [")?;
+        let mut op_arg_buf: OpArgBuf = Default::default();
         while offset < self.bytes.len() {
             let op = unsafe {
                 // safe! rely on ByteCode's invariant
                 self.read_op_code_at(offset)
-            }
-            .unwrap();
+            };
+            // println!("got arg {:?}", op);
             offset += 1;
             write!(f, "{:?}=0b{:X} [", op, op as u8)?;
-            for _ in 0..op.word_args() {
-                let word = self.read_word_at(offset).unwrap();
-                write!(f, "{:?}=0b{:X},", word, word)?;
-                offset += WORD_SIZE;
+            let num_words = op.word_args();
+            unsafe {
+                // safe! relies on my invariant
+                self.read_words_into(offset, &mut op_arg_buf[0..num_words]);
+            }
+            offset += num_words * WORD_SIZE;
+            for arg in op_arg_buf.iter().take(num_words) {
+                write!(f, "{:?}=0b{:X},", arg, arg)?;
             }
             write!(f, "]")?;
         }
@@ -86,38 +93,28 @@ impl OpCode {
     }
 }
 impl ByteCode<'_> {
-    // safe IFF caller provides offset to valid opcode
-    pub(crate) unsafe fn read_op_code_at(&self, offset: usize) -> Option<OpCode> {
-        if let Some(&byte) = self.bytes.get(offset) {
-            Some(std::mem::transmute(byte))
-        } else {
-            None
-        }
+    pub fn bytes_len(&self) -> usize {
+        self.bytes.len()
     }
-    pub(crate) fn read_word_at(&self, offset: usize) -> Option<usize> {
-        if offset < self.bytes.len() + WORD_SIZE {
-            Some(unsafe {
-                // safe! (1) we do bounds checking above, and (2) all mem contents are valid usize values
-                (self.bytes.get_unchecked(offset) as *const u8 as *const usize).read_unaligned()
-            })
-        } else {
-            None
-        }
+
+    // safe IFF caller provides offset to valid opcode
+    pub(crate) unsafe fn read_op_code_at(&self, offset: usize) -> OpCode {
+        std::mem::transmute(*self.bytes.get_unchecked(offset))
+    }
+
+    // safe IFF this won't read out of bounds
+    pub(crate) unsafe fn read_words_into(&self, offset_start: usize, args_dest: &mut [usize]) {
+        // sanity check (already covered by invariant)
+        assert!(offset_start + args_dest.len() * WORD_SIZE <= self.bytes.len());
+
+        let src = self.bytes.as_ptr().add(offset_start);
+        let dest = args_dest.as_mut_ptr() as *mut u8;
+        std::ptr::copy_nonoverlapping(src, dest, args_dest.len() * WORD_SIZE);
     }
 }
 impl ByteCodeBufBuilder {
     fn push_word_bytes(bytes: &mut Vec<u8>, word: usize) {
-        // 1. write WORD_SIZE bytes of nonsense into the vec (making space)
-        let dummy_iter = std::iter::repeat(0u8).take(WORD_SIZE);
-        bytes.extend(dummy_iter);
-        // 2. overview nonsense bytes with `word` bytes
-        unsafe {
-            // safe! (1) we write within the bounds of the vector,
-            // and (2) the transmutation [usize] -> [u8; WORD_SIZE] is always valid
-            let len = bytes.len() - WORD_SIZE;
-            let ptr = bytes.get_unchecked_mut(len) as *mut u8 as *mut usize;
-            ptr.write_unaligned(word);
-        }
+        bytes.extend(word.to_ne_bytes().iter().copied())
     }
     pub fn push_with_args(&mut self, op_code: OpCode) {
         self.bcb.bytes.push(op_code as u8);
@@ -126,6 +123,7 @@ impl ByteCodeBufBuilder {
         }
     }
     pub fn finish(self) -> ByteCodeBuf {
+        println!("DONE {:?}", &self.bcb.bytes);
         // TODO check that arg ptrs fall within bounds & land on an op code
         self.bcb
     }

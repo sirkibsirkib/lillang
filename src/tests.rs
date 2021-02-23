@@ -28,3 +28,18 @@ fn run_just_push() {
     });
     Vm::new_run(bcb.as_bytecode());
 }
+
+#[test]
+fn run_hello() {
+    let bcb = build_with(|bcbb| {
+        let string = b"hello\n";
+        for &byte in string.iter().rev() {
+            bcbb.args[0] = byte as usize;
+            bcbb.push_with_args(Oc::PushConst);
+        }
+        for _ in string {
+            bcbb.push_with_args(Oc::SysOut);
+        }
+    });
+    Vm::new_run(bcb.as_bytecode());
+}

@@ -33,26 +33,24 @@ impl<'a> VmParser<'a> {
     // successfully reads if res.code.is_some() afterwards
     // mutates res.args regardless of success
     pub fn parse_next(&mut self) {
-        let maybe_op_code = unsafe {
-            // safe! rely on VmParser's invariant
-            self.bytecode.read_op_code_at(self.next_code_offset)
+        self.res_buf.code = if self.next_code_offset < self.bytecode.bytes_len() {
+            let op = unsafe {
+                // safe! relies on my invariant
+                self.bytecode.read_op_code_at(self.next_code_offset)
+            };
+            self.next_code_offset += 1;
+            println!("got op {:?} with {} words", op, op.word_args());
+            let num_words = op.word_args();
+            unsafe {
+                // safe! relies on my invariant
+                self.bytecode
+                    .read_words_into(self.next_code_offset, &mut self.res_buf.args[0..num_words])
+            };
+            self.next_code_offset += WORD_SIZE * num_words;
+            Some(op)
+        } else {
+            None
         };
-        // we always self.next_code_offset
-        if let Some(op_code) = maybe_op_code {
-            let mut next_code_offset = self.next_code_offset + 1;
-            for arg in self.res_buf.args.iter_mut().take(op_code.word_args()) {
-                if let Some(word) = self.bytecode.read_word_at(next_code_offset) {
-                    *arg = word;
-                    next_code_offset += WORD_SIZE;
-                } else {
-                    self.res_buf.code = None;
-                    return; // malformed bytecode!
-                }
-            }
-            // We preserve the invariant: next_code_offset points to valid opcode
-            self.next_code_offset = next_code_offset;
-            self.res_buf.code = Some(op_code);
-        }
     }
 }
 impl<'a> Vm<'a> {
@@ -85,6 +83,9 @@ impl<'a> Vm<'a> {
                 Oc::WrapAddStack => {
                     let [a, b] = [self.stack.pop().unwrap(), self.stack.pop().unwrap()];
                     self.stack.push(a + b)
+                }
+                Oc::SysOut => {
+                    print!(" >> `{}`\n", self.stack.pop().unwrap() as u8 as char);
                 }
             }
             true
